@@ -1,0 +1,537 @@
+// use prisma-8
+
+enum UserRole {
+  @@type("pg/text@1")
+  FARMER = "farmer"
+  MARKET = "market"
+  ADMIN = "admin"
+}
+
+enum AccountStatus {
+  @@type("pg/text@1")
+  ACTIVE = "active"
+  SUSPENDED = "suspended"
+  PENDING = "pending"
+}
+
+enum FarmStatus {
+  @@type("pg/text@1")
+  ACTIVE = "active"
+  INACTIVE = "inactive"
+}
+
+enum CropCategory {
+  @@type("pg/text@1")
+  CEREALS = "cereals"
+  VEGETABLES = "vegetables"
+  FRUITS = "fruits"
+  LEGUMES = "legumes"
+  TUBERS = "tubers"
+  CASH_CROPS = "cash_crops"
+  OTHER = "other"
+}
+
+enum ActivityType {
+  @@type("pg/text@1")
+  LAND_PREPARATION = "land_preparation"
+  PLANTING = "planting"
+  IRRIGATION = "irrigation"
+  FERTILIZING = "fertilizing"
+  WEEDING = "weeding"
+  PEST_CONTROL = "pest_control"
+  PRUNING = "pruning"
+  HARVESTING = "harvesting"
+  OTHER = "other"
+}
+
+enum ExpenseCategory {
+  @@type("pg/text@1")
+  SEEDS = "seeds"
+  FERTILIZER = "fertilizer"
+  LABOUR = "labour"
+  EQUIPMENT = "equipment"
+  TRANSPORT = "transport"
+  IRRIGATION = "irrigation"
+  PEST_CONTROL = "pest_control"
+  OTHER = "other"
+}
+
+enum ListingStatus {
+  @@type("pg/text@1")
+  AVAILABLE = "available"
+  RESERVED = "reserved"
+  SOLD = "sold"
+  WITHDRAWN = "withdrawn"
+}
+
+enum RequirementStatus {
+  @@type("pg/text@1")
+  OPEN = "open"
+  FULFILLED = "fulfilled"
+  CLOSED = "closed"
+}
+
+enum QuestionStatus {
+  @@type("pg/text@1")
+  PENDING = "pending"
+  ANSWERED = "answered"
+  FLAGGED = "flagged"
+}
+
+enum ReportType {
+  @@type("pg/text@1")
+  FARM_SUMMARY = "farm_summary"
+  EXPENSE_SUMMARY = "expense_summary"
+  HARVEST_SUMMARY = "harvest_summary"
+  SALES_SUMMARY = "sales_summary"
+  ACTIVITY_SUMMARY = "activity_summary"
+}
+
+enum NotificationType {
+  @@type("pg/text@1")
+  SYSTEM = "system"
+  MARKET_REQUIREMENT = "market_requirement"
+  PRODUCE_LISTING = "produce_listing"
+  MESSAGE = "message"
+  ACCOUNT = "account"
+}
+
+enum SaleStatus {
+  @@type("pg/text@1")
+  RECORDED = "recorded"
+  CANCELLED = "cancelled"
+}
+
+enum PaymentStatus {
+  @@type("pg/text@1")
+  UNKNOWN = "unknown"
+  PENDING = "pending"
+  PARTIAL = "partial"
+  PAID = "paid"
+}
+
+model User {
+  id           Int           @id @default(autoincrement())
+  fullName     String
+  email        String        @unique
+  passwordHash String
+  phone        String?       @unique
+  role         UserRole      @default(FARMER)
+  status       AccountStatus @default(ACTIVE)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @onCreate(now()) @onUpdate(now())
+
+  farmerProfile FarmerProfile?
+  marketProfile MarketProfile?
+
+  farms         Farm[]
+  activities    FarmActivity[] @relation("ActivityRecorder")
+  expenses      Expense[]      @relation("ExpenseRecorder")
+  harvests      Harvest[]      @relation("HarvestRecorder")
+  saleRecords   SaleRecord[]
+  questions     AgriculturalQuestion[]
+  listings      ProduceListing[]
+  reports       Report[]
+  notifications Notification[]
+
+  farmerConversations Conversation[] @relation("FarmerConversations")
+  marketConversations Conversation[] @relation("MarketConversations")
+  sentMessages        Message[]      @relation("MessageSender")
+
+  createdKnowledgeDocuments KnowledgeDocument[] @relation("KnowledgeDocumentCreator")
+  auditLogs                AuditLog[]           @relation("AuditActor")
+
+  @@index([role, status])
+}
+
+model FarmerProfile {
+  id                Int      @id @default(autoincrement())
+  userId            Int      @unique
+  location          String?
+  county            String?
+  preferredLanguage String?
+  farmExperience    String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @onCreate(now()) @onUpdate(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model MarketProfile {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @unique
+  businessName String
+  description  String?
+  marketType   String?
+  location     String?
+  county       String?
+  address      String?
+  isVerified   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @onCreate(now()) @onUpdate(now())
+
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requirements MarketRequirement[]
+}
+
+model Farm {
+  id          Int        @id @default(autoincrement())
+  ownerId     Int
+  name        String
+  description String?
+  location    String?
+  county      String?
+  size        Decimal?
+  sizeUnit    String?    @default("acres")
+  latitude    Decimal?
+  longitude   Decimal?
+  status      FarmStatus @default(ACTIVE)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @onCreate(now()) @onUpdate(now())
+
+  owner      User           @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  farmCrops  FarmCrop[]
+  activities FarmActivity[]
+  inputs     FarmInput[]
+  expenses   Expense[]
+  harvests   Harvest[]
+  saleRecords SaleRecord[]
+  reports    Report[]
+
+  @@index([ownerId, status])
+}
+
+model Crop {
+  id             Int          @id @default(autoincrement())
+  name           String       @unique
+  scientificName String?
+  category       CropCategory @default(OTHER)
+  description    String?
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @onCreate(now()) @onUpdate(now())
+
+  farmCrops    FarmCrop[]
+  listings     ProduceListing[]
+  requirements MarketRequirement[]
+  saleRecords  SaleRecord[]
+}
+
+model FarmCrop {
+  id                  Int       @id @default(autoincrement())
+  farmId              Int
+  cropId              Int
+  variety             String?
+  plantingDate        DateTime?
+  expectedHarvestDate DateTime?
+  area                Decimal?
+  areaUnit            String?   @default("acres")
+  notes               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @onCreate(now()) @onUpdate(now())
+
+  farm       Farm          @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  crop       Crop          @relation(fields: [cropId], references: [id], onDelete: Restrict)
+  activities FarmActivity[]
+  harvests   Harvest[]
+
+  @@index([farmId])
+  @@index([cropId])
+}
+
+model FarmActivity {
+  id           Int          @id @default(autoincrement())
+  farmId       Int
+  farmCropId   Int?
+  recordedById Int
+  type         ActivityType
+  title        String
+  description  String?
+  activityDate DateTime
+  notes        String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @onCreate(now()) @onUpdate(now())
+
+  farm       Farm      @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  farmCrop   FarmCrop? @relation(fields: [farmCropId], references: [id], onDelete: SetNull)
+  recordedBy User      @relation("ActivityRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
+  expenses   Expense[]
+
+  @@index([farmId, activityDate])
+  @@index([farmCropId])
+}
+
+model FarmInput {
+  id           Int      @id @default(autoincrement())
+  farmId       Int
+  name         String
+  category     String?
+  quantity     Decimal
+  unit         String
+  costPerUnit  Decimal?
+  purchaseDate DateTime?
+  supplier     String?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @onCreate(now()) @onUpdate(now())
+
+  farm     Farm      @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  expenses Expense[]
+
+  @@index([farmId, name])
+}
+
+model Expense {
+  id           Int             @id @default(autoincrement())
+  farmId       Int
+  recordedById Int
+  activityId   Int?
+  inputId      Int?
+  category     ExpenseCategory @default(OTHER)
+  description  String
+  amount       Decimal
+  currency     String          @default("KES")
+  expenseDate  DateTime
+  notes        String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @onCreate(now()) @onUpdate(now())
+
+  farm       Farm          @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  recordedBy User          @relation("ExpenseRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
+  activity   FarmActivity? @relation(fields: [activityId], references: [id], onDelete: SetNull)
+  input      FarmInput?    @relation(fields: [inputId], references: [id], onDelete: SetNull)
+
+  @@index([farmId, expenseDate])
+  @@index([category])
+}
+
+model Harvest {
+  id           Int      @id @default(autoincrement())
+  farmId       Int
+  farmCropId   Int?
+  recordedById Int
+  harvestDate  DateTime
+  quantity     Decimal
+  unit         String
+  qualityGrade String?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @onCreate(now()) @onUpdate(now())
+
+  farm       Farm       @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  farmCrop   FarmCrop?  @relation(fields: [farmCropId], references: [id], onDelete: SetNull)
+  recordedBy User       @relation("HarvestRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
+  listings   ProduceListing[]
+  saleRecords SaleRecord[]
+
+  @@index([farmId, harvestDate])
+}
+
+model ProduceListing {
+  id             Int           @id @default(autoincrement())
+  farmerId       Int
+  cropId         Int
+  harvestId      Int?
+  title          String
+  description    String?
+  quantity       Decimal
+  availableFrom  DateTime?
+  availableUntil DateTime?
+  unit           String
+  pricePerUnit   Decimal?
+  currency       String        @default("KES")
+  location       String?
+  county         String?
+  status         ListingStatus @default(AVAILABLE)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @onCreate(now()) @onUpdate(now())
+
+  farmer  User     @relation(fields: [farmerId], references: [id], onDelete: Restrict)
+  crop    Crop     @relation(fields: [cropId], references: [id], onDelete: Restrict)
+  harvest Harvest? @relation(fields: [harvestId], references: [id], onDelete: SetNull)
+
+  @@index([status, cropId])
+  @@index([farmerId, status])
+  @@index([county, status])
+}
+
+model MarketRequirement {
+  id               Int               @id @default(autoincrement())
+  marketProfileId  Int
+  cropId           Int?
+  title            String
+  description      String?
+  quantity         Decimal?
+  unit             String?
+  targetPrice      Decimal?
+  currency         String            @default("KES")
+  deliveryLocation String?
+  county           String?
+  deadline         DateTime?
+  status           RequirementStatus @default(OPEN)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @onCreate(now()) @onUpdate(now())
+
+  market MarketProfile @relation(fields: [marketProfileId], references: [id], onDelete: Cascade)
+  crop   Crop?         @relation(fields: [cropId], references: [id], onDelete: SetNull)
+
+  @@index([status, cropId])
+  @@index([marketProfileId, status])
+  @@index([county, status])
+}
+
+model SaleRecord {
+  id            Int           @id @default(autoincrement())
+  farmerId      Int
+  farmId        Int
+  harvestId     Int?
+  cropId        Int
+  buyerName     String?
+  quantity      Decimal
+  unit          String
+  pricePerUnit  Decimal
+  totalAmount   Decimal
+  currency      String        @default("KES")
+  saleDate      DateTime
+  paymentStatus PaymentStatus @default(UNKNOWN)
+  status        SaleStatus    @default(RECORDED)
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @onCreate(now()) @onUpdate(now())
+
+  farmer  User     @relation(fields: [farmerId], references: [id], onDelete: Restrict)
+  farm    Farm     @relation(fields: [farmId], references: [id], onDelete: Restrict)
+  harvest Harvest? @relation(fields: [harvestId], references: [id], onDelete: SetNull)
+  crop    Crop     @relation(fields: [cropId], references: [id], onDelete: Restrict)
+
+  @@index([farmerId, saleDate])
+  @@index([farmId, saleDate])
+  @@index([cropId, saleDate])
+  @@index([status, saleDate])
+}
+
+model Conversation {
+  id           Int      @id @default(autoincrement())
+  farmerId     Int
+  marketUserId Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @onCreate(now()) @onUpdate(now())
+
+  farmer   User      @relation("FarmerConversations", fields: [farmerId], references: [id], onDelete: Restrict)
+  market   User      @relation("MarketConversations", fields: [marketUserId], references: [id], onDelete: Restrict)
+  messages Message[]
+
+  @@unique([farmerId, marketUserId])
+  @@index([farmerId])
+  @@index([marketUserId])
+}
+
+model Message {
+  id             Int       @id @default(autoincrement())
+  conversationId Int
+  senderId       Int
+  body           String
+  readAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("MessageSender", fields: [senderId], references: [id], onDelete: Restrict)
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+}
+
+model AgriculturalQuestion {
+  id         Int            @id @default(autoincrement())
+  userId     Int
+  question   String
+  answer     String?
+  status     QuestionStatus @default(PENDING)
+  language   String?
+  answeredAt DateTime?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @onCreate(now()) @onUpdate(now())
+
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sources QuestionSource[]
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model KnowledgeDocument {
+  id          Int      @id @default(autoincrement())
+  title       String
+  source      String?
+  category    String?
+  language    String?
+  contentText String
+  isPublished Boolean  @default(false)
+  createdById Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @onCreate(now()) @onUpdate(now())
+
+  createdBy User?            @relation("KnowledgeDocumentCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  questions QuestionSource[]
+
+  @@index([category, isPublished])
+  @@index([language, isPublished])
+}
+
+model QuestionSource {
+  questionId          Int
+  knowledgeDocumentId Int
+  relevanceScore      Decimal?
+
+  question AgriculturalQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  document KnowledgeDocument   @relation(fields: [knowledgeDocumentId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, knowledgeDocumentId])
+  @@index([knowledgeDocumentId])
+}
+
+model Report {
+  id          Int        @id @default(autoincrement())
+  userId      Int
+  farmId      Int?
+  type        ReportType
+  title       String
+  fileUrl     String?
+  parameters  Json?
+  generatedAt DateTime   @default(now())
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  farm Farm? @relation(fields: [farmId], references: [id], onDelete: SetNull)
+
+  @@index([userId, generatedAt])
+  @@index([farmId, type])
+}
+
+model Notification {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  type      NotificationType @default(SYSTEM)
+  title     String
+  body      String
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  actorId    Int?
+  action     String
+  entityType String
+  entityId   String?
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+}
